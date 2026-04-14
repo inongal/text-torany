@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מתמלל שמע באמצעות ג'מיני</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom scrollbar for the transcription box */
+        #result-text::-webkit-scrollbar {
+            width: 8px;
+        }
+        #result-text::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        #result-text::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        #result-text::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans text-slate-800">
+
+    <div class="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-6 md:p-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-blue-600 mb-4">
+                <i data-lucide="mic-2" class="w-8 h-8"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">מתמלל שמע מקוון</h1>
+            <p class="text-slate-500">העלו קובץ שמע והמערכת תתמלל אותו לטקסט</p>
+        </div>
+
+        <!-- API Key Settings -->
+        <div class="mb-6 bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <label class="block text-sm font-medium text-slate-700 mb-2">מפתח API של ג'מיני (נשמר מקומית בדפדפן)</label>
+            <div class="flex gap-2">
+                <input type="password" id="api-key-input" placeholder="הדביקו מפתח כאן..." class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" dir="ltr">
+                <button id="save-key-btn" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">שמור</button>
+            </div>
+            <p id="key-status" class="text-xs text-slate-500 mt-2 hidden"></p>
+        </div>
+
+        <!-- File Upload Area -->
+        <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-blue-500 hover:bg-blue-50 transition-colors cursor-pointer mb-6">
+            <input type="file" id="audio-file" accept="audio/*" class="hidden">
+            <i data-lucide="upload-cloud" class="w-12 h-12 text-slate-400 mx-auto mb-4"></i>
+            <h3 class="text-lg font-medium text-slate-700 mb-1">לחצו לבחירת קובץ שמע</h3>
+            <p class="text-sm text-slate-500">תומך ב- MP3, WAV, M4A (עד 15MB)</p>
+            <div id="file-name" class="mt-4 text-blue-600 font-medium hidden text-sm break-all"></div>
+        </div>
+
+        <!-- Message Box -->
+        <div id="message-box" class="hidden rounded-lg p-4 mb-6 text-sm font-medium"></div>
+
+        <!-- Actions -->
+        <button id="transcribe-btn" disabled class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+            <i data-lucide="sparkles" class="w-5 h-5"></i>
+            <span>תמלל עכשיו</span>
+            <div id="loading-spinner" class="hidden ml-2 w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        </button>
+
+        <!-- Result Area -->
+        <div id="result-area" class="hidden mt-8 opacity-0 transition-opacity duration-500">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-semibold text-slate-800">תוצאת התמלול:</h3>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-400 font-medium">ניתן לערוך את הטקסט</span>
+                    <button id="copy-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 p-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                        <span>העתק</span>
+                    </button>
+                </div>
+            </div>
+            <!-- Added contenteditable="true" and outline-none to the result text div -->
+            <div id="result-text" contenteditable="true" class="w-full h-64 bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-700 leading-relaxed overflow-y-auto whitespace-pre-wrap outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"></div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Gemini API setup
+        const apiKey = ""; 
+
+        // DOM Elements
+        const fileInput = document.getElementById('audio-file');
+        const dropZone = document.getElementById('drop-zone');
+        const fileNameDisplay = document.getElementById('file-name');
+        const transcribeBtn = document.getElementById('transcribe-btn');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const resultArea = document.getElementById('result-area');
+        const resultText = document.getElementById('result-text');
+        const messageBox = document.getElementById('message-box');
+        const copyBtn = document.getElementById('copy-btn');
+        const apiKeyInput = document.getElementById('api-key-input');
+        const saveKeyBtn = document.getElementById('save-key-btn');
+        const keyStatus = document.getElementById('key-status');
+
+        let selectedFile = null;
+        const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+
+        // API Key Local Storage Logic
+        let currentApiKey = localStorage.getItem('gemini_api_key') || "";
+        if (currentApiKey) {
+            apiKeyInput.value = currentApiKey;
+        }
+
+        saveKeyBtn.addEventListener('click', () => {
+            const key = apiKeyInput.value.trim();
+            if (key) {
+                localStorage.setItem('gemini_api_key', key);
+                currentApiKey = key;
+                showKeyStatus("המפתח נשמר בדפדפן בהצלחה!", "success");
+            } else {
+                localStorage.removeItem('gemini_api_key');
+                currentApiKey = "";
+                showKeyStatus("המפתח הוסר", "error");
+            }
+        });
+
+        function showKeyStatus(text, type) {
+            keyStatus.textContent = text;
+            keyStatus.className = `text-xs mt-2 font-medium ${type === 'success' ? 'text-green-600' : 'text-red-500'}`;
+            keyStatus.classList.remove('hidden');
+            setTimeout(() => keyStatus.classList.add('hidden'), 3000);
+        }
+
+        function getEffectiveApiKey() {
+            return currentApiKey || apiKey;
+        }
+
+        // File Selection Logic
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            hideMessage();
+            resultArea.classList.add('hidden');
+            resultArea.classList.remove('opacity-100');
+            
+            if (!file.type.startsWith('audio/')) {
+                showMessage('אנא בחרו קובץ שמע תקין.', 'error');
+                resetSelection();
+                return;
+            }
+
+            if (file.size > MAX_FILE_SIZE) {
+                showMessage('הקובץ גדול מדי. אנא העלו קובץ שמע עד 15MB.', 'error');
+                resetSelection();
+                return;
+            }
+
+            selectedFile = file;
+            fileNameDisplay.textContent = `נבחר קובץ: ${file.name}`;
+            fileNameDisplay.classList.remove('hidden');
+            transcribeBtn.disabled = false;
+        }
+
+        function resetSelection() {
+            selectedFile = null;
+            fileInput.value = '';
+            fileNameDisplay.textContent = '';
+            fileNameDisplay.classList.add('hidden');
+            transcribeBtn.disabled = true;
+        }
+
+        // Message Handling
+        function showMessage(text, type = 'error') {
+            messageBox.textContent = text;
+            messageBox.className = `rounded-lg p-4 mb-6 text-sm font-medium ${
+                type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+            }`;
+            messageBox.classList.remove('hidden');
+        }
+
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+        }
+
+        // File to Base64
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const result = reader.result;
+                    const base64 = result.split(',')[1];
+                    const mimeType = file.type || 'audio/mp3';
+                    resolve({ base64, mimeType });
+                };
+                reader.onerror = () => reject(new Error("שגיאה בקריאת הקובץ במכשיר שלך."));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Exponential Backoff Fetch
+        async function fetchWithRetry(url, options) {
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            for (let i = 0; i <= delays.length; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(`שגיאת שרת: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    if (i === delays.length) {
+                        throw error;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delays[i]));
+                }
+            }
+        }
+
+        // Main Transcription Action
+        transcribeBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            // UI Loading state
+            transcribeBtn.disabled = true;
+            loadingSpinner.classList.remove('hidden');
+            transcribeBtn.querySelector('span').textContent = 'מתמלל...';
+            hideMessage();
+            resultArea.classList.add('hidden');
+            resultArea.classList.remove('opacity-100');
+
+            try {
+                // Check API Key
+                const effectiveKey = getEffectiveApiKey();
+                if (!effectiveKey) {
+                    throw new Error("יש להזין ולשמור מפתח API כדי להתחיל בתמלול.");
+                }
+
+                const DYNAMIC_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${effectiveKey}`;
+
+                // Prepare file
+                const { base64, mimeType } = await readFileAsBase64(selectedFile);
+
+                // Prepare API payload
+                const payload = {
+                    contents: [{
+                        parts: [
+                            { text: "תמלל את קובץ השמע המצורף מילה במילה (Verbatim). חובה עליך לכתוב בדיוק את כל מה שנאמר, לא להשמיט אף מילה, לא לסכם ולא לערוך את התחביר. החזר אך ורק את הטקסט המתומלל ללא שום תוספות או הקדמות." },
+                            { inlineData: { mimeType: mimeType, data: base64 } }
+                        ]
+                    }]
+                };
+
+                // Call API
+                const data = await fetchWithRetry(DYNAMIC_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                // Extract text
+                const transcribedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (!transcribedText) {
+                    throw new Error("המערכת לא הצליחה לזהות טקסט בקובץ זה.");
+                }
+
+                // Show result
+                resultText.textContent = transcribedText;
+                resultArea.classList.remove('hidden');
+                setTimeout(() => resultArea.classList.add('opacity-100'), 50);
+
+            } catch (error) {
+                showMessage(`אירעה שגיאה במהלך התמלול: ${error.message}`, 'error');
+            } finally {
+                // Reset loading state
+                transcribeBtn.disabled = false;
+                loadingSpinner.classList.add('hidden');
+                transcribeBtn.querySelector('span').textContent = 'תמלל עכשיו';
+            }
+        });
+
+        // Copy to clipboard fallback (iframe safe)
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = resultText.textContent;
+            if (!textToCopy) return;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = textToCopy;
+            // Prevent scrolling to bottom of page in MS Edge
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '0';
+            textarea.style.opacity = '0';
+            
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    const originalText = copyBtn.innerHTML;
+                    copyBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i><span>הועתק!</span>`;
+                    lucide.createIcons();
+                    setTimeout(() => {
+                        copyBtn.innerHTML = originalText;
+                        lucide.createIcons();
+                    }, 2000);
+                } else {
+                    showMessage("לא ניתן להעתיק את הטקסט אוטומטית.", 'error');
+                }
+            } catch (err) {
+                showMessage("שגיאה בניסיון ההעתקה.", 'error');
+            }
+
+            document.body.removeChild(textarea);
+        });
+    </script>
+</body>
+</html>
