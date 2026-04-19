@@ -1,432 +1,469 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Printer, Square, Type, Calculator, Eraser, Highlighter, Hash, X, Image as ImageIcon } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מחולל תשבצים מקצועי</title>
+  
+  <!-- ספריות עיצוב ואייקונים -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- ספריות ריאקט שרצות ישירות בדפדפן -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-export default function App() {
-  const [rows, setRows] = useState(12);
-  const [cols, setCols] = useState(12);
-  const [grid, setGrid] = useState([]);
-  const [mode, setMode] = useState('block'); // 'block', 'text', 'highlight', 'number'
-  const [clues, setClues] = useState([]);
-  const [numberingDirection, setNumberingDirection] = useState('across'); // 'across' or 'down'
-  const [modalState, setModalState] = useState({ isOpen: false, r: null, c: null, value: '' });
-  const [bgImage, setBgImage] = useState(null);
-
-  // Initialize or resize grid
-  useEffect(() => {
-    setGrid((prevGrid) => {
-      const newGrid = Array(rows).fill(null).map((_, r) =>
-        Array(cols).fill(null).map((_, c) => {
-          if (prevGrid[r] && prevGrid[r][c]) {
-            return { ...prevGrid[r][c] };
-          }
-          return {
-            isBlocked: false,
-            number: null,
-            value: '',
-            isHighlighted: false,
-          };
-        })
-      );
-      return newGrid;
-    });
-  }, [rows, cols]);
-
-  const calculateNumbers = useCallback(() => {
-    let num = 1;
-    const newGrid = grid.map(row => row.map(cell => ({ ...cell, number: null })));
-    const newClues = [];
-
-    // סריקה מימין לשמאל ומלמעלה למטה
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (newGrid[r][c].isBlocked) continue;
-
-        let needsNumber = false;
-
-        if (numberingDirection === 'across') {
-          // מילה מאוזנת: משבצת ימנית חסומה/קצה, ומשבצת שמאלית פתוחה (RTL - ימין זה 0)
-          const isRightBlocked = c === 0 || newGrid[r][c - 1].isBlocked;
-          const isLeftOpen = c < cols - 1 && !newGrid[r][c + 1].isBlocked;
-          needsNumber = isRightBlocked && isLeftOpen;
-        } else {
-          // מילה מאונכת: משבצת עליונה חסומה/קצה, ומשבצת תחתונה פתוחה
-          const isTopBlocked = r === 0 || newGrid[r - 1][c].isBlocked;
-          const isBottomOpen = r < rows - 1 && !newGrid[r + 1][c].isBlocked;
-          needsNumber = isTopBlocked && isBottomOpen;
-        }
-
-        if (needsNumber) {
-          newGrid[r][c].number = num;
-          newClues.push({ num, text: '' });
-          num++;
-        }
+  <style>
+    /* CSS מיוחד להדפסה מושלמת ב- A4 שוכב */
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 0;
       }
-    }
-
-    const preserveText = (newArr, oldArr) => {
-      return newArr.map(nc => {
-        const existing = oldArr.find(oc => oc.num === nc.num);
-        return existing ? { ...nc, text: existing.text } : nc;
-      });
-    };
-
-    setClues(prev => preserveText(newClues, prev));
-    setGrid(newGrid);
-  }, [grid, rows, cols, numberingDirection]);
-
-  const syncCluesWithGrid = useCallback((currentGrid) => {
-    const gridNumbers = new Set();
-    currentGrid.forEach(row => {
-      row.forEach(cell => {
-        if (!cell.isBlocked && cell.number) {
-          gridNumbers.add(Number(cell.number));
-        }
-      });
-    });
-
-    setClues(prev => {
-      const newClues = [];
-      const sortedNumbers = Array.from(gridNumbers).sort((a, b) => a - b);
-      sortedNumbers.forEach(num => {
-        const existing = prev.find(c => c.num === num);
-        newClues.push(existing ? existing : { num, text: '' });
-      });
-      return newClues;
-    });
-  }, []);
-
-  const handleCellClick = (r, c) => {
-    if (mode === 'number') {
-      const cell = grid[r][c];
-      if (!cell.isBlocked) {
-        let proposedVal = cell.number || '';
-        if (!proposedVal) {
-          let max = 0;
-          grid.forEach(row => row.forEach(cl => {
-            if (cl.number > max) max = cl.number;
-          }));
-          proposedVal = max + 1;
-        }
-        setModalState({ isOpen: true, r, c, value: proposedVal });
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
-      return;
-    }
-
-    const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
-    const cell = newGrid[r][c];
-
-    if (mode === 'block') {
-      cell.isBlocked = !cell.isBlocked;
-      if (cell.isBlocked) {
-        cell.value = '';
-        cell.isHighlighted = false;
-        cell.number = null;
+      .print-hidden { display: none !important; }
+      .printable-wrapper {
+        width: 297mm !important;
+        height: 210mm !important;
+        margin: 0 !important;
+        padding: 15mm !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        page-break-after: avoid;
+        page-break-before: avoid;
       }
-    } else if (mode === 'highlight') {
-      if (!cell.isBlocked) {
-        cell.isHighlighted = !cell.isHighlighted;
-      }
-    }
-    setGrid(newGrid);
-  };
-
-  const handleCellChange = (r, c, val) => {
-    if (mode !== 'text') return;
-    const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
-    newGrid[r][c].value = val.slice(-1);
-    setGrid(newGrid);
-  };
-
-  const handleClueChange = (num, text) => {
-    setClues(prev => prev.map(c => c.num === num ? { ...c, text } : c));
-  };
-
-  const clearGrid = () => {
-    if (window.confirm('האם אתה בטוח שברצונך לנקות את כל התשבץ?')) {
-      const newGrid = Array(rows).fill(null).map(() =>
-        Array(cols).fill(null).map(() => ({
-          isBlocked: false, number: null, value: '', isHighlighted: false
-        }))
-      );
-      setGrid(newGrid);
-      setClues([]);
-    }
-  };
-
-  const handleSaveManualNumber = (e) => {
-    e.preventDefault();
-    const { r, c, value } = modalState;
-    const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
-    
-    if (value === '' || isNaN(value)) {
-      newGrid[r][c].number = null;
-    } else {
-      newGrid[r][c].number = Number(value);
     }
     
-    setGrid(newGrid);
-    syncCluesWithGrid(newGrid);
-    setModalState({ isOpen: false, r: null, c: null, value: '' });
-  };
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => setBgImage(event.target.result);
-      reader.readAsDataURL(file);
+    /* הסתרת פס גלילה באזור ההדפסה */
+    .print-hidden-scroll::-webkit-scrollbar {
+        display: none;
     }
-  };
+    .print-hidden-scroll {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  
+  <div id="root"></div>
 
-  return (
-    <div dir="rtl" className="min-h-screen bg-gray-100 text-gray-800 font-sans p-4 md:p-8">
-      {/* CSS מיוחד להדפסה מושלמת ב- A4 שוכב */}
-      <style>{`
-        @media print {
-          @page {
-            size: A4 landscape;
-            margin: 0;
-          }
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .print-hidden { display: none !important; }
-          .printable-wrapper {
-            width: 297mm !important;
-            height: 210mm !important;
-            margin: 0 !important;
-            padding: 15mm !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
-            page-break-after: avoid;
-            page-break-before: avoid;
+  <!-- קוד האפליקציה -->
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    function App() {
+      const [rows, setRows] = useState(12);
+      const [cols, setCols] = useState(12);
+      const [grid, setGrid] = useState([]);
+      const [mode, setMode] = useState('block'); // 'block', 'text', 'highlight', 'number'
+      const [clues, setClues] = useState([]);
+      const [numberingDirection, setNumberingDirection] = useState('across'); // 'across' or 'down'
+      const [modalState, setModalState] = useState({ isOpen: false, r: null, c: null, value: '' });
+      const [bgImage, setBgImage] = useState(null);
+
+      // Initialize or resize grid
+      useEffect(() => {
+        setGrid((prevGrid) => {
+          const newGrid = Array(rows).fill(null).map((_, r) =>
+            Array(cols).fill(null).map((_, c) => {
+              if (prevGrid[r] && prevGrid[r][c]) {
+                return { ...prevGrid[r][c] };
+              }
+              return {
+                isBlocked: false,
+                number: null,
+                value: '',
+                isHighlighted: false,
+              };
+            })
+          );
+          return newGrid;
+        });
+      }, [rows, cols]);
+
+      const calculateNumbers = useCallback(() => {
+        let num = 1;
+        const newGrid = grid.map(row => row.map(cell => ({ ...cell, number: null })));
+        const newClues = [];
+
+        // סריקה מימין לשמאל ומלמעלה למטה
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (newGrid[r][c].isBlocked) continue;
+
+            let needsNumber = false;
+
+            if (numberingDirection === 'across') {
+              // מילה מאוזנת: משבצת ימנית חסומה/קצה, ומשבצת שמאלית פתוחה (RTL - ימין זה 0)
+              const isRightBlocked = c === 0 || newGrid[r][c - 1].isBlocked;
+              const isLeftOpen = c < cols - 1 && !newGrid[r][c + 1].isBlocked;
+              needsNumber = isRightBlocked && isLeftOpen;
+            } else {
+              // מילה מאונכת: משבצת עליונה חסומה/קצה, ומשבצת תחתונה פתוחה
+              const isTopBlocked = r === 0 || newGrid[r - 1][c].isBlocked;
+              const isBottomOpen = r < rows - 1 && !newGrid[r + 1][c].isBlocked;
+              needsNumber = isTopBlocked && isBottomOpen;
+            }
+
+            if (needsNumber) {
+              newGrid[r][c].number = num;
+              newClues.push({ num, text: '' });
+              num++;
+            }
           }
         }
-      `}</style>
 
-      {/* אזור שליטה (Control Panel) - יוסתר בהדפסה */}
-      <div className="print-hidden mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h1 className="text-2xl font-bold mb-6 text-indigo-900">מחולל תשבצים מקצועי (A4 שוכב)</h1>
+        const preserveText = (newArr, oldArr) => {
+          return newArr.map(nc => {
+            const existing = oldArr.find(oc => oc.num === nc.num);
+            return existing ? { ...nc, text: existing.text } : nc;
+          });
+        };
+
+        setClues(prev => preserveText(newClues, prev));
+        setGrid(newGrid);
+      }, [grid, rows, cols, numberingDirection]);
+
+      const syncCluesWithGrid = useCallback((currentGrid) => {
+        const gridNumbers = new Set();
+        currentGrid.forEach(row => {
+          row.forEach(cell => {
+            if (!cell.isBlocked && cell.number) {
+              gridNumbers.add(Number(cell.number));
+            }
+          });
+        });
+
+        setClues(prev => {
+          const newClues = [];
+          const sortedNumbers = Array.from(gridNumbers).sort((a, b) => a - b);
+          sortedNumbers.forEach(num => {
+            const existing = prev.find(c => c.num === num);
+            newClues.push(existing ? existing : { num, text: '' });
+          });
+          return newClues;
+        });
+      }, []);
+
+      const handleCellClick = (r, c) => {
+        if (mode === 'number') {
+          const cell = grid[r][c];
+          if (!cell.isBlocked) {
+            let proposedVal = cell.number || '';
+            if (!proposedVal) {
+              let max = 0;
+              grid.forEach(row => row.forEach(cl => {
+                if (cl.number > max) max = cl.number;
+              }));
+              proposedVal = max + 1;
+            }
+            setModalState({ isOpen: true, r, c, value: proposedVal });
+          }
+          return;
+        }
+
+        const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
+        const cell = newGrid[r][c];
+
+        if (mode === 'block') {
+          cell.isBlocked = !cell.isBlocked;
+          if (cell.isBlocked) {
+            cell.value = '';
+            cell.isHighlighted = false;
+            cell.number = null;
+          }
+        } else if (mode === 'highlight') {
+          if (!cell.isBlocked) {
+            cell.isHighlighted = !cell.isHighlighted;
+          }
+        }
+        setGrid(newGrid);
+      };
+
+      const handleCellChange = (r, c, val) => {
+        if (mode !== 'text') return;
+        const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
+        newGrid[r][c].value = val.slice(-1);
+        setGrid(newGrid);
+      };
+
+      const handleClueChange = (num, text) => {
+        setClues(prev => prev.map(c => c.num === num ? { ...c, text } : c));
+      };
+
+      const clearGrid = () => {
+        if (window.confirm('האם אתה בטוח שברצונך לנקות את כל התשבץ?')) {
+          const newGrid = Array(rows).fill(null).map(() =>
+            Array(cols).fill(null).map(() => ({
+              isBlocked: false, number: null, value: '', isHighlighted: false
+            }))
+          );
+          setGrid(newGrid);
+          setClues([]);
+        }
+      };
+
+      const handleSaveManualNumber = (e) => {
+        e.preventDefault();
+        const { r, c, value } = modalState;
+        const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
         
-        <div className="flex flex-wrap gap-6 items-end">
+        if (value === '' || isNaN(value)) {
+          newGrid[r][c].number = null;
+        } else {
+          newGrid[r][c].number = Number(value);
+        }
+        
+        setGrid(newGrid);
+        syncCluesWithGrid(newGrid);
+        setModalState({ isOpen: false, r: null, c: null, value: '' });
+      };
+
+      const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => setBgImage(event.target.result);
+          reader.readAsDataURL(file);
+        }
+      };
+
+      return (
+        <div dir="rtl" className="min-h-screen text-gray-800 font-sans p-4 md:p-8">
           
-          <div className="flex gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">שורות</label>
-              <input type="number" min="5" max="25" value={rows} onChange={e => setRows(Number(e.target.value))} 
-                     className="w-16 p-2 border rounded text-center" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">עמודות</label>
-              <input type="number" min="5" max="25" value={cols} onChange={e => setCols(Number(e.target.value))} 
-                     className="w-16 p-2 border rounded text-center" />
-            </div>
-          </div>
-
-          <div className="h-10 border-r border-gray-300 mx-1"></div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">כלי עריכה</label>
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <button onClick={() => setMode('block')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'block' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
-                <Square size={16} className="fill-current" /> חסימה
-              </button>
-              <button onClick={() => setMode('text')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'text' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
-                <Type size={16} /> טקסט
-              </button>
-              <button onClick={() => setMode('highlight')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'highlight' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
-                <Highlighter size={16} /> הדגשה
-              </button>
-              <button onClick={() => setMode('number')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'number' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
-                <Hash size={16} /> מספור
-              </button>
-            </div>
-          </div>
-
-          <div className="h-10 border-r border-gray-300 mx-1"></div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">כיוון מספור</label>
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              <button onClick={() => setNumberingDirection('across')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${numberingDirection === 'across' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
-                מאוזן
-              </button>
-              <button onClick={() => setNumberingDirection('down')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${numberingDirection === 'down' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
-                מאונך
-              </button>
-            </div>
-          </div>
-
-          <div className="h-10 border-r border-gray-300 mx-1"></div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">תמונת רקע</label>
-            <div className="flex items-center gap-2">
-              <label className="cursor-pointer flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm">
-                <ImageIcon size={16} />
-                {bgImage ? 'החלף רקע' : 'בחר רקע'}
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-              </label>
-              {bgImage && (
-                <button onClick={() => setBgImage(null)} title="הסר רקע" className="text-red-500 hover:bg-red-50 p-2 rounded-md">
-                   <X size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        <div className="flex gap-3 mt-6 border-t pt-4">
-          <button onClick={calculateNumbers} className="flex items-center gap-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-4 py-2 rounded-lg font-medium transition-colors">
-            <Calculator size={18} /> מספור אוטומטי
-          </button>
-          <button onClick={clearGrid} className="flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg font-medium transition-colors">
-            <Eraser size={18} /> נקה הכל
-          </button>
-          <button onClick={() => window.print()} className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 px-6 py-2 rounded-lg font-medium transition-colors shadow-sm ml-auto">
-            <Printer size={18} /> הדפס ל-A4
-          </button>
-        </div>
-      </div>
-
-      {/* אזור ההדפסה (Printable Area) */}
-      <div className="flex justify-center w-full overflow-x-auto pb-10 print-hidden-scroll">
-        <div 
-          className="printable-wrapper relative bg-white shadow-xl rounded-xl overflow-hidden flex"
-          style={{ 
-            width: '100%', 
-            maxWidth: '1123px', // A4 Width approx
-            aspectRatio: '297 / 210', // A4 Landscape ratio
-            padding: '24px'
-          }}
-        >
-          {/* תמונת רקע */}
-          {bgImage && (
-            <img 
-              src={bgImage} 
-              alt="Background" 
-              className="absolute inset-0 w-full h-full object-cover opacity-60 z-0 pointer-events-none" 
-            />
-          )}
-
-          {/* תוכן התשבץ (מעל הרקע) */}
-          <div className="relative z-10 flex flex-row gap-8 w-full h-full">
+          {/* אזור שליטה (Control Panel) - יוסתר בהדפסה */}
+          <div className="print-hidden mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h1 className="text-2xl font-bold mb-6 text-indigo-900">מחולל תשבצים מקצועי (A4 שוכב)</h1>
             
-            {/* רשת התשבץ */}
-            <div className="flex-shrink-0 flex items-start justify-center">
-              <div className="bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200">
-                <div 
-                  className="inline-grid border-2 border-black"
-                  style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-                >
-                  {grid.map((row, r) => (
-                    row.map((cell, c) => (
-                      <div 
-                        key={`${r}-${c}`} 
-                        onClick={() => handleCellClick(r, c)}
-                        className={`
-                          relative w-10 h-10 sm:w-11 sm:h-11 border border-black flex items-center justify-center select-none
-                          ${cell.isBlocked ? 'bg-black' : 'bg-white'}
-                          ${cell.isHighlighted && !cell.isBlocked ? 'bg-gray-300' : ''}
-                          ${mode !== 'text' ? 'cursor-pointer hover:opacity-80' : ''}
-                        `}
-                      >
-                        {/* מספר קטן */}
-                        {!cell.isBlocked && cell.number && (
-                          <span className="absolute top-0.5 right-1 text-[10px] font-bold leading-none text-black pointer-events-none z-10">
-                            {cell.number}
-                          </span>
-                        )}
-                        
-                        {/* טקסט/אות */}
-                        {!cell.isBlocked && (
-                          <input
-                            type="text"
-                            value={cell.value}
-                            onChange={(e) => handleCellChange(r, c, e.target.value)}
-                            readOnly={mode !== 'text'}
-                            className={`
-                              w-full h-full text-center text-xl font-bold uppercase bg-transparent outline-none
-                              ${mode === 'text' ? 'cursor-text' : 'cursor-pointer'}
-                            `}
-                            style={{ pointerEvents: mode === 'text' ? 'auto' : 'none' }}
-                          />
-                        )}
-                      </div>
-                    ))
-                  ))}
+            <div className="flex flex-wrap gap-6 items-end">
+              
+              <div className="flex gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">שורות</label>
+                  <input type="number" min="5" max="25" value={rows} onChange={e => setRows(Number(e.target.value))} 
+                         className="w-16 p-2 border rounded text-center" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">עמודות</label>
+                  <input type="number" min="5" max="25" value={cols} onChange={e => setCols(Number(e.target.value))} 
+                         className="w-16 p-2 border rounded text-center" />
                 </div>
               </div>
+
+              <div className="h-10 border-r border-gray-300 mx-1"></div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">כלי עריכה</label>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button onClick={() => setMode('block')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'block' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-square"></i> חסימה
+                  </button>
+                  <button onClick={() => setMode('text')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'text' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-font"></i> טקסט
+                  </button>
+                  <button onClick={() => setMode('highlight')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'highlight' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-highlighter"></i> הדגשה
+                  </button>
+                  <button onClick={() => setMode('number')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'number' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-hashtag"></i> מספור
+                  </button>
+                </div>
+              </div>
+
+              <div className="h-10 border-r border-gray-300 mx-1"></div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">כיוון מספור</label>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button onClick={() => setNumberingDirection('across')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${numberingDirection === 'across' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    מאוזן
+                  </button>
+                  <button onClick={() => setNumberingDirection('down')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${numberingDirection === 'down' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    מאונך
+                  </button>
+                </div>
+              </div>
+
+              <div className="h-10 border-r border-gray-300 mx-1"></div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">תמונת רקע</label>
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm">
+                    <i className="fas fa-image"></i>
+                    {bgImage ? 'החלף רקע' : 'בחר רקע'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  </label>
+                  {bgImage && (
+                    <button onClick={() => setBgImage(null)} title="הסר רקע" className="text-red-500 hover:bg-red-50 p-2 rounded-md">
+                       <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
+
             </div>
 
-            {/* אזור ההגדרות */}
-            <div className="flex-1 flex flex-col h-full bg-white/90 p-6 rounded-xl shadow-sm border border-gray-200 overflow-y-auto">
-              <h2 className="text-xl font-bold mb-4 border-b-2 border-black pb-1">
-                {numberingDirection === 'across' ? 'הגדרות (שורות מאוזנות):' : 'הגדרות (טורים מאונכים):'}
-              </h2>
-              
-              {clues.length === 0 ? (
-                <p className="text-gray-500 text-sm print-hidden">לחצו על 'מספור אוטומטי' כדי לייצר את רשימת ההגדרות.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {clues.map(clue => (
-                    <li key={`clue-${clue.num}`} className="flex items-start gap-2 break-inside-avoid">
-                      <span className="font-bold min-w-[24px] text-left mt-1">{clue.num}.</span>
-                      <input 
-                        type="text" 
-                        value={clue.text} 
-                        onChange={(e) => handleClueChange(clue.num, e.target.value)}
-                        placeholder="הקלידו הגדרה..."
-                        className="flex-1 bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base font-medium py-1"
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <div className="flex gap-3 mt-6 border-t pt-4">
+              <button onClick={calculateNumbers} className="flex items-center gap-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-4 py-2 rounded-lg font-medium transition-colors">
+                <i className="fas fa-calculator"></i> מספור אוטומטי
+              </button>
+              <button onClick={clearGrid} className="flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg font-medium transition-colors">
+                <i className="fas fa-eraser"></i> נקה הכל
+              </button>
+              <button onClick={() => window.print()} className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 px-6 py-2 rounded-lg font-medium transition-colors shadow-sm ml-auto">
+                <i className="fas fa-print"></i> הדפס ל-A4
+              </button>
             </div>
-
           </div>
-        </div>
-      </div>
 
-      {/* חלונית למספור ידני */}
-      {modalState.isOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 print-hidden">
-          <form onSubmit={handleSaveManualNumber} className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm" dir="rtl">
-            <div className="flex justify-between items-center mb-4 border-b pb-3">
-              <h3 className="text-lg font-bold text-indigo-900">הגדרת מספר לתא</h3>
-              <button type="button" onClick={() => setModalState({ isOpen: false, r: null, c: null, value: '' })} className="text-gray-500 hover:bg-gray-100 p-1 rounded-md transition-colors">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2 text-gray-700">מספר תא (השאר ריק כדי למחוק):</label>
-              <input 
-                autoFocus
-                type="number" 
-                min="1"
-                value={modalState.value} 
-                onChange={(e) => setModalState({...modalState, value: e.target.value})}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg" 
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button type="button" onClick={() => setModalState({...modalState, value: ''})} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors">
-                נקה מספר
-              </button>
-              <button type="submit" className="px-5 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-colors shadow-sm">
-                שמור
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+          {/* אזור ההדפסה (Printable Area) */}
+          <div className="flex justify-center w-full overflow-x-auto pb-10 print-hidden-scroll">
+            <div 
+              className="printable-wrapper relative bg-white shadow-xl rounded-xl overflow-hidden flex"
+              style={{ 
+                width: '100%', 
+                maxWidth: '1123px', // A4 Width approx
+                aspectRatio: '297 / 210', // A4 Landscape ratio
+                padding: '24px'
+              }}
+            >
+              {/* תמונת רקע */}
+              {bgImage && (
+                <img 
+                  src={bgImage} 
+                  alt="Background" 
+                  className="absolute inset-0 w-full h-full object-cover opacity-60 z-0 pointer-events-none" 
+                />
+              )}
 
-    </div>
-  );
-}
+              {/* תוכן התשבץ (מעל הרקע) */}
+              <div className="relative z-10 flex flex-row gap-8 w-full h-full">
+                
+                {/* רשת התשבץ */}
+                <div className="flex-shrink-0 flex items-start justify-center">
+                  <div className="bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200">
+                    <div 
+                      className="inline-grid border-2 border-black"
+                      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                    >
+                      {grid.map((row, r) => (
+                        row.map((cell, c) => (
+                          <div 
+                            key={`${r}-${c}`} 
+                            onClick={() => handleCellClick(r, c)}
+                            className={`
+                              relative w-10 h-10 sm:w-11 sm:h-11 border border-black flex items-center justify-center select-none
+                              ${cell.isBlocked ? 'bg-black' : 'bg-white'}
+                              ${cell.isHighlighted && !cell.isBlocked ? 'bg-gray-300' : ''}
+                              ${mode !== 'text' ? 'cursor-pointer hover:opacity-80' : ''}
+                            `}
+                          >
+                            {/* מספר קטן */}
+                            {!cell.isBlocked && cell.number && (
+                              <span className="absolute top-0.5 right-1 text-[10px] font-bold leading-none text-black pointer-events-none z-10">
+                                {cell.number}
+                              </span>
+                            )}
+                            
+                            {/* טקסט/אות */}
+                            {!cell.isBlocked && (
+                              <input
+                                type="text"
+                                value={cell.value}
+                                onChange={(e) => handleCellChange(r, c, e.target.value)}
+                                readOnly={mode !== 'text'}
+                                className={`
+                                  w-full h-full text-center text-xl font-bold uppercase bg-transparent outline-none
+                                  ${mode === 'text' ? 'cursor-text' : 'cursor-pointer'}
+                                `}
+                                style={{ pointerEvents: mode === 'text' ? 'auto' : 'none' }}
+                              />
+                            )}
+                          </div>
+                        ))
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* אזור ההגדרות */}
+                <div className="flex-1 flex flex-col h-full bg-white/90 p-6 rounded-xl shadow-sm border border-gray-200 overflow-y-auto">
+                  <h2 className="text-xl font-bold mb-4 border-b-2 border-black pb-1">
+                    {numberingDirection === 'across' ? 'הגדרות (שורות מאוזנות):' : 'הגדרות (טורים מאונכים):'}
+                  </h2>
+                  
+                  {clues.length === 0 ? (
+                    <p className="text-gray-500 text-sm print-hidden">לחצו על 'מספור אוטומטי' כדי לייצר את רשימת ההגדרות.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {clues.map(clue => (
+                        <li key={`clue-${clue.num}`} className="flex items-start gap-2 break-inside-avoid">
+                          <span className="font-bold min-w-[24px] text-left mt-1">{clue.num}.</span>
+                          <input 
+                            type="text" 
+                            value={clue.text} 
+                            onChange={(e) => handleClueChange(clue.num, e.target.value)}
+                            placeholder="הקלידו הגדרה..."
+                            className="flex-1 bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base font-medium py-1"
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* חלונית למספור ידני */}
+          {modalState.isOpen && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 print-hidden">
+              <form onSubmit={handleSaveManualNumber} className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm" dir="rtl">
+                <div className="flex justify-between items-center mb-4 border-b pb-3">
+                  <h3 className="text-lg font-bold text-indigo-900">הגדרת מספר לתא</h3>
+                  <button type="button" onClick={() => setModalState({ isOpen: false, r: null, c: null, value: '' })} className="text-gray-500 hover:bg-gray-100 p-1 rounded-md transition-colors">
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2 text-gray-700">מספר תא (השאר ריק כדי למחוק):</label>
+                  <input 
+                    autoFocus
+                    type="number" 
+                    min="1"
+                    value={modalState.value} 
+                    onChange={(e) => setModalState({...modalState, value: e.target.value})}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg" 
+                  />
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <button type="button" onClick={() => setModalState({...modalState, value: ''})} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors">
+                    נקה מספר
+                  </button>
+                  <button type="submit" className="px-5 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-colors shadow-sm">
+                    שמור
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
