@@ -53,7 +53,7 @@
         color: transparent !important;
       }
       
-      li {
+      li, .clue-row {
         page-break-inside: avoid;
         break-inside: avoid;
       }
@@ -82,11 +82,9 @@
       const [mode, setMode] = useState('block'); 
       const [bgImage, setBgImage] = useState(null);
       
-      // רשימות נפרדות למאוזן ומאונך
       const [cluesAcross, setCluesAcross] = useState([]);
       const [cluesDown, setCluesDown] = useState([]);
 
-      // מצב חלונית המספור כולל כיוונים
       const [modalState, setModalState] = useState({ isOpen: false, r: null, c: null, value: '', isAcross: false, isDown: false });
       
       const [title, setTitle] = useState('התשבץ שלי');
@@ -103,8 +101,8 @@
         { label: 'גופן מערכת', value: "system-ui, -apple-system, sans-serif" }
       ];
 
-      // חישוב גודל הרשת דינמית
-      const MAX_GRID_WIDTH = 480; 
+      // הגדלנו את השטח המוקצה לתשבץ מכיוון שחסכנו עמודת הגדרות
+      const MAX_GRID_WIDTH = 650; 
       const MAX_GRID_HEIGHT = 480; 
       const calculatedCellSize = Math.min(MAX_GRID_WIDTH / cols, MAX_GRID_HEIGHT / rows);
       const cellSize = Math.min(calculatedCellSize, 45); 
@@ -123,42 +121,50 @@
         });
       }, [rows, cols]);
 
-      // מספור אוטומטי - מחפש אך ורק מילים מאוזנות
+      // מספור אוטומטי - כעת רק מוסיף למאוזן ולא דורס קיים
       const calculateNumbersAcross = useCallback(() => {
-        if (!window.confirm('פעולה זו תחשב מחדש את המספור האוטומטי (למילים מאוזנות בלבד) ותאפס מספור קיים. להמשיך?')) return;
+        const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
+        const newCluesAcross = [...cluesAcross];
         
-        let num = 1;
-        const newGrid = grid.map(row => row.map(cell => ({ ...cell, number: null })));
-        const newCluesAcross = [];
+        // מוצאים מה המספר הכי גבוה שכבר קיים ברשת כדי להמשיך ממנו
+        let maxNum = 0;
+        newGrid.forEach(row => row.forEach(c => {
+          if (c.number && c.number > maxNum) maxNum = c.number;
+        }));
 
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             if (newGrid[r][c].isBlocked) continue;
 
-            // בדיקה האם זו תחילת מילה מאוזנת (ימין חסום/קצה ושמאל פתוח)
             const isRightBlocked = c === 0 || newGrid[r][c - 1].isBlocked;
             const isLeftOpen = c < cols - 1 && !newGrid[r][c + 1].isBlocked;
             const needsNumber = isRightBlocked && isLeftOpen;
 
             if (needsNumber) {
-              newGrid[r][c].number = num;
-              newCluesAcross.push({ num, text: '' });
-              num++;
+              let currentNumber = newGrid[r][c].number;
+              
+              // אם אין למשבצת מספר, נותנים לה מספר חדש
+              if (!currentNumber) {
+                maxNum++;
+                currentNumber = maxNum;
+                newGrid[r][c].number = currentNumber;
+              }
+
+              // אם המספר הזה עוד לא ברשימת המאוזנים, נוסיף אותו
+              if (!newCluesAcross.find(cl => cl.num === currentNumber)) {
+                newCluesAcross.push({ num: currentNumber, text: '' });
+              }
             }
           }
         }
 
-        const preserveText = (newArr, oldArr) => {
-          return newArr.map(nc => {
-            const existing = oldArr.find(oc => oc.num === nc.num);
-            return existing ? { ...nc, text: existing.text } : nc;
-          });
-        };
+        // מסדרים את ההגדרות לפי המספרים
+        newCluesAcross.sort((a, b) => a.num - b.num);
 
-        setCluesAcross(prev => preserveText(newCluesAcross, prev));
-        setCluesDown([]); // איפוס מאונכים כי הרשת חושבה מחדש
+        setCluesAcross(newCluesAcross);
         setGrid(newGrid);
-      }, [grid, rows, cols]);
+        // שים לב: אנחנו לא נוגעים בכלל ב- setCluesDown כדי לשמור עליו!
+      }, [grid, rows, cols, cluesAcross]);
 
       const handleCellClick = (r, c) => {
         if (mode === 'number') {
@@ -172,12 +178,11 @@
               isAc = cluesAcross.some(cl => cl.num === proposedVal);
               isDw = cluesDown.some(cl => cl.num === proposedVal);
             } else {
-              // הצעת המספר הבא הפנוי
               let max = 0;
               cluesAcross.forEach(cl => { if (cl.num > max) max = cl.num; });
               cluesDown.forEach(cl => { if (cl.num > max) max = cl.num; });
               proposedVal = max + 1;
-              isDw = true; // ברירת מחדל למספור ידני - מאונך (כי מאוזן לרוב אוטומטי)
+              isDw = true; // ברירת מחדל ידנית למאונך (כי מאוזן לרוב אוטומטי)
             }
             
             setModalState({ isOpen: true, r, c, value: proposedVal, isAcross: isAc, isDown: isDw });
@@ -194,7 +199,6 @@
             cell.value = '';
             cell.isHighlighted = false;
             
-            // מחיקת ההגדרה אם חסמנו משבצת שהיה בה מספר
             if (cell.number) {
                 setCluesAcross(prev => prev.filter(cl => cl.num !== cell.number));
                 setCluesDown(prev => prev.filter(cl => cl.num !== cell.number));
@@ -235,7 +239,6 @@
         }
       };
 
-      // שמירת מספור ידני לתוך הרשימות הנכונות
       const handleSaveManualNumber = (e) => {
         e.preventDefault();
         const { r, c, value, isAcross, isDown } = modalState;
@@ -247,7 +250,6 @@
         newGrid[r][c].number = numVal;
         setGrid(newGrid);
 
-        // עדכון רשימה מאוזנת
         setCluesAcross(prev => {
           let next = [...prev];
           if (oldNumVal !== null && oldNumVal !== numVal) {
@@ -263,7 +265,6 @@
           return next.sort((a,b) => a.num - b.num);
         });
 
-        // עדכון רשימה מאונכת
         setCluesDown(prev => {
           let next = [...prev];
           if (oldNumVal !== null && oldNumVal !== numVal) {
@@ -295,7 +296,7 @@
         <div dir="rtl" className="min-h-screen text-gray-800 p-4 md:p-8">
           
           <div className="print-hidden mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h1 className="text-2xl font-bold mb-6 text-indigo-900">מחולל תשבצים מקצועי (כולל מאוזן ומאונך)</h1>
+            <h1 className="text-2xl font-bold mb-6 text-indigo-900">מחולל תשבצים מקצועי</h1>
             
             <div className="flex flex-wrap gap-6 items-end">
               
@@ -404,10 +405,10 @@
                 />
               </div>
 
-              {/* תוכן: רשת + שתי עמודות של הגדרות */}
-              <div className="relative z-10 flex flex-row gap-5 w-full flex-1 min-h-0 overflow-hidden">
+              {/* תוכן: רשת בולטת + עמודת הגדרות אחת שמחולקת למאונך ומאוזן */}
+              <div className="relative z-10 flex flex-row gap-6 w-full flex-1 min-h-0 overflow-hidden">
                 
-                {/* רשת התשבץ */}
+                {/* רשת התשבץ (כעת יכולה לתפוס יותר מקום) */}
                 <div className="flex-shrink-0 flex items-start justify-center">
                   <div className="bg-white/90 p-3 rounded-xl shadow-sm border border-gray-200 inline-block">
                     <div className="inline-grid border-2 border-black" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
@@ -437,50 +438,55 @@
                   </div>
                 </div>
 
-                {/* הגדרות - מאוזן */}
-                <div className="flex-1 flex flex-col h-full bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  <h2 className="text-lg font-bold mb-3 border-b-2 border-black pb-1" style={{ fontFamily: selectedFont }}>מאוזן:</h2>
-                  <div className="flex-1 overflow-y-auto pr-2">
-                    {cluesAcross.length === 0 ? (
-                      <p className="text-gray-500 text-sm print-hidden" style={{ fontFamily: selectedFont }}>לחצו על מספור אוטומטי או הוסיפו ידנית.</p>
-                    ) : (
-                      <div style={{ fontFamily: selectedFont }}>
-                        {cluesAcross.map(clue => (
-                          <div key={`clue-ac-${clue.num}`} className="flex items-start gap-2 mb-2 break-inside-avoid" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-                            <span className="font-bold min-w-[20px] text-left mt-1">{clue.num}.</span>
-                            <input 
-                              type="text" value={clue.text} onChange={(e) => handleClueChange(clue.num, 'across', e.target.value)} placeholder="הגדרה..."
-                              className="flex-1 bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base py-1 transition-colors w-full"
-                              style={{ fontFamily: selectedFont }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* הגדרות - עמודה אחת המכילה גם מאונך וגם מאוזן */}
+                <div className="flex-1 flex flex-col gap-4 h-full min-w-[250px]">
+                  
+                  {/* הגדרות - מאונך (למעלה) */}
+                  <div className="flex-1 flex flex-col bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <h2 className="text-lg font-bold mb-2 border-b-2 border-black pb-1" style={{ fontFamily: selectedFont }}>מאונך:</h2>
+                    <div className="flex-1 overflow-y-auto pr-2">
+                      {cluesDown.length === 0 ? (
+                        <p className="text-gray-500 text-sm print-hidden" style={{ fontFamily: selectedFont }}>השתמשו בכלי המספור כדי להוסיף הגדרות.</p>
+                      ) : (
+                        <div style={{ fontFamily: selectedFont }}>
+                          {cluesDown.map(clue => (
+                            <div key={`clue-dw-${clue.num}`} className="clue-row flex items-start gap-2 mb-2">
+                              <span className="font-bold min-w-[20px] text-left mt-1">{clue.num}.</span>
+                              <input 
+                                type="text" value={clue.text} onChange={(e) => handleClueChange(clue.num, 'down', e.target.value)} placeholder="הגדרה..."
+                                className="flex-1 bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base py-1 transition-colors w-full"
+                                style={{ fontFamily: selectedFont }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* הגדרות - מאונך */}
-                <div className="flex-1 flex flex-col h-full bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  <h2 className="text-lg font-bold mb-3 border-b-2 border-black pb-1" style={{ fontFamily: selectedFont }}>מאונך:</h2>
-                  <div className="flex-1 overflow-y-auto pr-2">
-                    {cluesDown.length === 0 ? (
-                      <p className="text-gray-500 text-sm print-hidden" style={{ fontFamily: selectedFont }}>השתמשו בכלי המספור כדי להוסיף הגדרות מאונכות.</p>
-                    ) : (
-                      <div style={{ fontFamily: selectedFont }}>
-                        {cluesDown.map(clue => (
-                          <div key={`clue-dw-${clue.num}`} className="flex items-start gap-2 mb-2 break-inside-avoid" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-                            <span className="font-bold min-w-[20px] text-left mt-1">{clue.num}.</span>
-                            <input 
-                              type="text" value={clue.text} onChange={(e) => handleClueChange(clue.num, 'down', e.target.value)} placeholder="הגדרה..."
-                              className="flex-1 bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base py-1 transition-colors w-full"
-                              style={{ fontFamily: selectedFont }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  {/* הגדרות - מאוזן (למטה) */}
+                  <div className="flex-1 flex flex-col bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <h2 className="text-lg font-bold mb-2 border-b-2 border-black pb-1" style={{ fontFamily: selectedFont }}>מאוזן:</h2>
+                    <div className="flex-1 overflow-y-auto pr-2">
+                      {cluesAcross.length === 0 ? (
+                        <p className="text-gray-500 text-sm print-hidden" style={{ fontFamily: selectedFont }}>השתמשו במספור האוטומטי.</p>
+                      ) : (
+                        <div style={{ fontFamily: selectedFont }}>
+                          {cluesAcross.map(clue => (
+                            <div key={`clue-ac-${clue.num}`} className="clue-row flex items-start gap-2 mb-2">
+                              <span className="font-bold min-w-[20px] text-left mt-1">{clue.num}.</span>
+                              <input 
+                                type="text" value={clue.text} onChange={(e) => handleClueChange(clue.num, 'across', e.target.value)} placeholder="הגדרה..."
+                                className="flex-1 bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base py-1 transition-colors w-full"
+                                style={{ fontFamily: selectedFont }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
+
                 </div>
 
               </div>
