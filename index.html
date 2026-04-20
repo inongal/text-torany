@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>מחולל תשבצים מקצועי - מותאם אישית</title>
+  <title>מחולל תשבצים מקצועי</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,12 +16,12 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <style id="dynamic-print-style">
+  <style>
     body, input, button, textarea {
       font-family: 'Varela Round', sans-serif;
     }
 
-    /* הגדרות הדפסה בסיסיות */
+    /* הגדרות קבועות להדפסה - כיוון הדף נקבע דינמית בריאקט */
     @media print {
       body {
         margin: 0 !important;
@@ -38,23 +38,28 @@
         top: 0 !important;
         left: 0 !important;
         margin: 0 !important;
-        padding: 10mm !important;
+        padding: 12mm !important;
         box-shadow: none !important;
         border-radius: 0 !important;
         overflow: hidden !important; 
       }
 
-      input::placeholder { color: transparent !important; }
-      .clue-row { page-break-inside: avoid; break-inside: avoid; }
+      input::placeholder {
+        color: transparent !important;
+      }
+      
+      .clue-item {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
     }
     
-    .print-hidden-scroll::-webkit-scrollbar { display: none; }
-    .print-hidden-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-
-    /* עיצוב עמודות להגדרות */
-    .clues-multi-col {
-      column-count: 2;
-      column-gap: 20px;
+    .print-hidden-scroll::-webkit-scrollbar {
+        display: none;
+    }
+    .print-hidden-scroll {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
     }
   </style>
 </head>
@@ -63,7 +68,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo } = React;
+    const { useState, useEffect, useCallback } = React;
 
     function App() {
       const [rows, setRows] = useState(12);
@@ -71,48 +76,43 @@
       const [grid, setGrid] = useState([]);
       const [mode, setMode] = useState('block'); 
       const [bgImage, setBgImage] = useState(null);
-      const [orientation, setOrientation] = useState('landscape'); // 'landscape' or 'portrait'
       
       const [cluesAcross, setCluesAcross] = useState([]);
       const [cluesDown, setCluesDown] = useState([]);
+
       const [modalState, setModalState] = useState({ isOpen: false, r: null, c: null, value: '', isAcross: false, isDown: false });
       
       const [isDragging, setIsDragging] = useState(false);
       const [dragAction, setDragAction] = useState(null);
+
       const [title, setTitle] = useState('התשבץ שלי');
-      const [subtitle, setSubtitle] = useState('הוראות: מלאו את המשבצות לפי ההגדרות למטה...');
+      const [subtitle, setSubtitle] = useState('כתבו כאן את כותרת המשנה או הוראות לפותרים...');
+
+      // אפשרות חדשה - כיוון הדפסה
+      const [printOrientation, setPrintOrientation] = useState('landscape'); // 'landscape' | 'portrait'
 
       const [selectedFont, setSelectedFont] = useState("'Varela Round', sans-serif");
       const fontOptions = [
-        { label: 'Varela Round', value: "'Varela Round', sans-serif" },
-        { label: 'Arial', value: "Arial, sans-serif" },
+        { label: 'Varela Round (ברירת מחדל)', value: "'Varela Round', sans-serif" },
+        { label: 'Arial', value: "Arial, Helvetica, sans-serif" },
         { label: 'David', value: "'David', serif" },
-        { label: 'Tahoma', value: "Tahoma, sans-serif" }
+        { label: 'Frank Ruhl', value: "'Frank Ruhl Libre', serif" },
+        { label: 'Tahoma', value: "Tahoma, Geneva, sans-serif" },
+        { label: 'Courier New', value: "'Courier New', Courier, monospace" },
+        { label: 'גופן מערכת', value: "system-ui, -apple-system, sans-serif" }
       ];
 
-      // עדכון הגדרת ה-CSS של @page לפי כיוון הדף
-      useEffect(() => {
-        const styleTag = document.getElementById('dynamic-print-style');
-        const printRules = orientation === 'landscape' 
-          ? `@media print { @page { size: A4 landscape; margin: 0mm; } .printable-wrapper { width: 297mm; height: 210mm; } }`
-          : `@media print { @page { size: A4 portrait; margin: 0mm; } .printable-wrapper { width: 210mm; height: 297mm; } }`;
-        
-        // הוספת החוקים החדשים
-        const existingRules = styleTag.innerHTML.split('/* Dynamic Rules Start */')[0];
-        styleTag.innerHTML = existingRules + '/* Dynamic Rules Start */\n' + printRules;
-      }, [orientation]);
-
-      // חישוב גודל משבצת דינמי
-      const cellSize = useMemo(() => {
-        const spaceGridX = orientation === 'landscape' ? 600 : 700;
-        const spaceGridY = orientation === 'landscape' ? 450 : 500;
-        const calcWidth = spaceGridX / cols;
-        const calcHeight = spaceGridY / rows;
-        return Math.min(calcWidth, calcHeight, 40);
-      }, [rows, cols, orientation]);
+      // חישוב גודל תאים דינמי מותאם לכיוון הדף
+      const containerWidth = printOrientation === 'landscape' ? 650 : 700;
+      const containerHeight = printOrientation === 'landscape' ? 480 : 650;
+      const calculatedCellSize = Math.min(containerWidth / cols, containerHeight / rows);
+      const cellSize = Math.min(calculatedCellSize, 45); 
 
       useEffect(() => {
-        const handleMouseUp = () => { setIsDragging(false); setDragAction(null); };
+        const handleMouseUp = () => {
+          setIsDragging(false);
+          setDragAction(null);
+        };
         window.addEventListener('mouseup', handleMouseUp);
         return () => window.removeEventListener('mouseup', handleMouseUp);
       }, []);
@@ -121,7 +121,9 @@
         setGrid((prevGrid) => {
           const newGrid = Array(rows).fill(null).map((_, r) =>
             Array(cols).fill(null).map((_, c) => {
-              if (prevGrid[r] && prevGrid[r][c]) return { ...prevGrid[r][c] };
+              if (prevGrid[r] && prevGrid[r][c]) {
+                return { ...prevGrid[r][c] };
+              }
               return { isBlocked: false, number: null, value: '', isHighlighted: false };
             })
           );
@@ -132,41 +134,72 @@
       const calculateNumbersAcross = useCallback(() => {
         const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
         const newCluesAcross = [...cluesAcross];
+        
         let maxNum = 0;
-        newGrid.forEach(row => row.forEach(c => { if (c.number && c.number > maxNum) maxNum = c.number; }));
+        newGrid.forEach(row => row.forEach(c => {
+          if (c.number && c.number > maxNum) maxNum = c.number;
+        }));
 
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             if (newGrid[r][c].isBlocked) continue;
+
             const isRightBlocked = c === 0 || newGrid[r][c - 1].isBlocked;
             const isLeftOpen = c < cols - 1 && !newGrid[r][c + 1].isBlocked;
-            if (isRightBlocked && isLeftOpen) {
-              let currentNumber = newGrid[r][c].number || ++maxNum;
-              newGrid[r][c].number = currentNumber;
-              if (!newCluesAcross.find(cl => cl.num === currentNumber)) newCluesAcross.push({ num: currentNumber, text: '' });
+            const needsNumber = isRightBlocked && isLeftOpen;
+
+            if (needsNumber) {
+              let currentNumber = newGrid[r][c].number;
+              
+              if (!currentNumber) {
+                maxNum++;
+                currentNumber = maxNum;
+                newGrid[r][c].number = currentNumber;
+              }
+
+              if (!newCluesAcross.find(cl => cl.num === currentNumber)) {
+                newCluesAcross.push({ num: currentNumber, text: '' });
+              }
             }
           }
         }
-        setCluesAcross(newCluesAcross.sort((a, b) => a.num - b.num));
+
+        newCluesAcross.sort((a, b) => a.num - b.num);
+        setCluesAcross(newCluesAcross);
         setGrid(newGrid);
       }, [grid, rows, cols, cluesAcross]);
 
       const applyDragAction = (r, c, action) => {
+        const cell = grid[r][c];
+        
+        if (action === 'block' && cell.isBlocked) return;
+        if (action === 'unblock' && !cell.isBlocked) return;
+        if (action === 'highlight' && (cell.isHighlighted || cell.isBlocked)) return;
+        if (action === 'unhighlight' && !cell.isHighlighted) return;
+
+        if (action === 'block' && cell.number) {
+            setCluesAcross(prev => prev.filter(cl => cl.num !== cell.number));
+            setCluesDown(prev => prev.filter(cl => cl.num !== cell.number));
+        }
+
         setGrid(prevGrid => {
-          const newGrid = prevGrid.map(row => [...row]);
-          const cell = { ...newGrid[r][c] };
-          if (action === 'block') {
-            cell.isBlocked = true; cell.value = ''; cell.isHighlighted = false;
-            if (cell.number) {
-              setCluesAcross(prev => prev.filter(cl => cl.num !== cell.number));
-              setCluesDown(prev => prev.filter(cl => cl.num !== cell.number));
+            const newGrid = prevGrid.map(row => [...row]);
+            newGrid[r][c] = { ...prevGrid[r][c] };
+            const newCell = newGrid[r][c];
+
+            if (action === 'block') {
+                newCell.isBlocked = true;
+                newCell.value = '';
+                newCell.isHighlighted = false;
+                newCell.number = null;
+            } else if (action === 'unblock') {
+                newCell.isBlocked = false;
+            } else if (action === 'highlight') {
+                newCell.isHighlighted = true;
+            } else if (action === 'unhighlight') {
+                newCell.isHighlighted = false;
             }
-            cell.number = null;
-          } else if (action === 'unblock') cell.isBlocked = false;
-          else if (action === 'highlight') cell.isHighlighted = true;
-          else if (action === 'unhighlight') cell.isHighlighted = false;
-          newGrid[r][c] = cell;
-          return newGrid;
+            return newGrid;
         });
       };
 
@@ -174,144 +207,407 @@
         if (mode === 'number') {
           const cell = grid[r][c];
           if (!cell.isBlocked) {
-            let val = cell.number || (Math.max(0, ...cluesAcross.map(c=>c.num), ...cluesDown.map(c=>c.num)) + 1);
-            setModalState({ isOpen: true, r, c, value: val, isAcross: cluesAcross.some(cl => cl.num === val), isDown: cluesDown.some(cl => cl.num === val) || !cell.number });
+            let proposedVal = cell.number || '';
+            let isAc = false;
+            let isDw = false;
+            
+            if (proposedVal) {
+              isAc = cluesAcross.some(cl => cl.num === proposedVal);
+              isDw = cluesDown.some(cl => cl.num === proposedVal);
+            } else {
+              let max = 0;
+              cluesAcross.forEach(cl => { if (cl.num > max) max = cl.num; });
+              cluesDown.forEach(cl => { if (cl.num > max) max = cl.num; });
+              proposedVal = max + 1;
+              isDw = true; 
+            }
+            
+            setModalState({ isOpen: true, r, c, value: proposedVal, isAcross: isAc, isDown: isDw });
           }
           return;
         }
+
         if (mode === 'text') return;
+
         setIsDragging(true);
-        const action = mode === 'block' ? (grid[r][c].isBlocked ? 'unblock' : 'block') : (grid[r][c].isHighlighted ? 'unhighlight' : 'highlight');
+        const cell = grid[r][c];
+        let action = null;
+        
+        if (mode === 'block') {
+          action = cell.isBlocked ? 'unblock' : 'block';
+        } else if (mode === 'highlight') {
+          action = cell.isHighlighted ? 'unhighlight' : 'highlight';
+        }
+        
         setDragAction(action);
         applyDragAction(r, c, action);
+      };
+
+      const handleMouseEnter = (r, c) => {
+        if (isDragging && dragAction) {
+            applyDragAction(r, c, dragAction);
+        }
+      };
+
+      const handleCellChange = (r, c, val) => {
+        if (mode !== 'text') return;
+        const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
+        newGrid[r][c].value = val.slice(-1);
+        setGrid(newGrid);
+      };
+
+      const handleClueChange = (num, direction, text) => {
+        if (direction === 'across') {
+          setCluesAcross(prev => prev.map(c => c.num === num ? { ...c, text } : c));
+        } else {
+          setCluesDown(prev => prev.map(c => c.num === num ? { ...c, text } : c));
+        }
+      };
+
+      const clearGrid = () => {
+        if (window.confirm('האם אתה בטוח שברצונך לנקות את כל התשבץ?')) {
+          const newGrid = Array(rows).fill(null).map(() =>
+            Array(cols).fill(null).map(() => ({
+              isBlocked: false, number: null, value: '', isHighlighted: false
+            }))
+          );
+          setGrid(newGrid);
+          setCluesAcross([]);
+          setCluesDown([]);
+        }
       };
 
       const handleSaveManualNumber = (e) => {
         e.preventDefault();
         const { r, c, value, isAcross, isDown } = modalState;
-        const numVal = Number(value);
-        const oldNum = grid[r][c].number;
-        setGrid(prev => { const n = [...prev]; n[r][c] = {...n[r][c], number: numVal}; return n; });
-        const update = (prev, keep) => {
-          let next = prev.filter(cl => cl.num !== oldNum && cl.num !== numVal);
-          if (keep) next.push({ num: numVal, text: prev.find(cl => cl.num === oldNum || cl.num === numVal)?.text || '' });
+        
+        const numVal = (value === '' || isNaN(value)) ? null : Number(value);
+        const oldNumVal = grid[r][c].number;
+
+        const newGrid = grid.map(row => row.map(cell => ({ ...cell })));
+        newGrid[r][c].number = numVal;
+        setGrid(newGrid);
+
+        setCluesAcross(prev => {
+          let next = [...prev];
+          if (oldNumVal !== null && oldNumVal !== numVal) {
+               next = next.filter(cl => cl.num !== oldNumVal);
+          }
+          if (numVal !== null) {
+              if (isAcross) {
+                  if (!next.find(cl => cl.num === numVal)) next.push({ num: numVal, text: '' });
+              } else {
+                  next = next.filter(cl => cl.num !== numVal);
+              }
+          }
           return next.sort((a,b) => a.num - b.num);
-        };
-        setCluesAcross(prev => update(prev, isAcross));
-        setCluesDown(prev => update(prev, isDown));
+        });
+
+        setCluesDown(prev => {
+          let next = [...prev];
+          if (oldNumVal !== null && oldNumVal !== numVal) {
+               next = next.filter(cl => cl.num !== oldNumVal);
+          }
+          if (numVal !== null) {
+              if (isDown) {
+                  if (!next.find(cl => cl.num === numVal)) next.push({ num: numVal, text: '' });
+              } else {
+                  next = next.filter(cl => cl.num !== numVal);
+              }
+          }
+          return next.sort((a,b) => a.num - b.num);
+        });
+
         setModalState({ isOpen: false, r: null, c: null, value: '', isAcross: false, isDown: false });
       };
 
+      const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => setBgImage(event.target.result);
+          reader.readAsDataURL(file);
+        }
+      };
+
       return (
-        <div dir="rtl" className="min-h-screen text-gray-800 p-4">
+        <div dir="rtl" className="min-h-screen text-gray-800 p-4 md:p-8">
           
-          {/* לוח בקרה */}
-          <div className="print-hidden mb-8 bg-white p-6 rounded-xl shadow-md border border-indigo-100 max-w-6xl mx-auto">
-            <div className="flex flex-wrap gap-6 items-end justify-between">
-              <div className="flex gap-4">
-                <div><label className="block text-xs font-bold mb-1">שורות</label><input type="number" value={rows} onChange={e => setRows(Number(e.target.value))} className="w-14 p-1 border rounded" /></div>
-                <div><label className="block text-xs font-bold mb-1">עמודות</label><input type="number" value={cols} onChange={e => setCols(Number(e.target.value))} className="w-14 p-1 border rounded" /></div>
-              </div>
+          {/* הזרקת קוד CSS דינמי להגדרות המדפסת (A4 לאורך/לרוחב) */}
+          <style>
+            {`
+              @media print {
+                @page { 
+                  size: A4 ${printOrientation}; 
+                  margin: 0mm; 
+                }
+                .printable-wrapper {
+                  width: ${printOrientation === 'landscape' ? '297mm' : '210mm'} !important;
+                  height: ${printOrientation === 'landscape' ? '209.5mm' : '296.5mm'} !important;
+                }
+              }
+            `}
+          </style>
+
+          <div className="print-hidden mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h1 className="text-2xl font-bold mb-6 text-indigo-900">מחולל תשבצים מקצועי</h1>
+            
+            <div className="flex flex-wrap gap-6 items-end">
               
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                {['block', 'text', 'highlight', 'number'].map(m => (
-                  <button key={m} onClick={() => setMode(m)} className={`px-3 py-1.5 rounded-md text-sm font-bold ${mode === m ? 'bg-white shadow text-indigo-600' : 'hover:bg-gray-200'}`}>
-                    {m === 'block' ? 'שחור' : m === 'text' ? 'טקסט' : m === 'highlight' ? 'הדגשה' : 'מספר'}
+              <div className="flex gap-4">
+                <div>
+                  <label className="block text-sm font-bold mb-1">שורות</label>
+                  <input type="number" min="5" max="35" value={rows} onChange={e => setRows(Number(e.target.value))} 
+                         className="w-16 p-2 border rounded text-center" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">עמודות</label>
+                  <input type="number" min="5" max="35" value={cols} onChange={e => setCols(Number(e.target.value))} 
+                         className="w-16 p-2 border rounded text-center" />
+                </div>
+              </div>
+
+              <div className="h-10 border-r border-gray-300 mx-1"></div>
+
+              <div>
+                <label className="block text-sm font-bold mb-1">כלי עריכה (תומך גרירה)</label>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button onClick={() => setMode('block')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'block' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-square"></i> חסימה
                   </button>
-                ))}
+                  <button onClick={() => setMode('text')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'text' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-font"></i> טקסט
+                  </button>
+                  <button onClick={() => setMode('highlight')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'highlight' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-highlighter"></i> הדגשה
+                  </button>
+                  <button onClick={() => setMode('number')} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${mode === 'number' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    <i className="fas fa-hashtag"></i> מספור ידני
+                  </button>
+                </div>
               </div>
 
-              <div className="flex bg-indigo-50 rounded-lg p-1">
-                <button onClick={() => setOrientation('landscape')} className={`px-3 py-1.5 rounded-md text-sm font-bold ${orientation === 'landscape' ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-100'}`}>A4 שוכב</button>
-                <button onClick={() => setOrientation('portrait')} className={`px-3 py-1.5 rounded-md text-sm font-bold ${orientation === 'portrait' ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-100'}`}>A4 עומד</button>
+              <div className="h-10 border-r border-gray-300 mx-1"></div>
+
+              <div>
+                <label className="block text-sm font-bold mb-1">תמונת רקע</label>
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-bold transition-colors text-sm">
+                    <i className="fas fa-image"></i>
+                    {bgImage ? 'החלף רקע' : 'בחר רקע'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  </label>
+                  {bgImage && (
+                    <button onClick={() => setBgImage(null)} title="הסר רקע" className="text-red-500 hover:bg-red-50 p-2 rounded-md">
+                       <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex gap-2">
-                <button onClick={calculateNumbersAcross} className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-green-200">מספור אוטומטי</button>
-                <button onClick={() => window.print()} className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700"><i className="fas fa-print ml-2"></i>הדפס</button>
+              <div className="h-10 border-r border-gray-300 mx-1"></div>
+
+              <div>
+                <label className="block text-sm font-bold mb-1">גופן לתשבץ</label>
+                <select 
+                  value={selectedFont} 
+                  onChange={(e) => setSelectedFont(e.target.value)}
+                  className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg font-bold transition-colors text-sm border-none outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                >
+                  {fontOptions.map(font => (
+                    <option key={font.value} value={font.value}>{font.label}</option>
+                  ))}
+                </select>
               </div>
+
+              <div className="h-10 border-r border-gray-300 mx-1"></div>
+
+              <div>
+                <label className="block text-sm font-bold mb-1">כיוון דף להדפסה</label>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button onClick={() => setPrintOrientation('landscape')} className={`px-3 py-2 text-sm font-bold rounded-md transition-colors ${printOrientation === 'landscape' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    לרוחב (A4)
+                  </button>
+                  <button onClick={() => setPrintOrientation('portrait')} className={`px-3 py-2 text-sm font-bold rounded-md transition-colors ${printOrientation === 'portrait' ? 'bg-white shadow text-indigo-700' : 'hover:bg-gray-200'}`}>
+                    לאורך (A4)
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="flex gap-3 mt-6 border-t pt-4">
+              <button onClick={calculateNumbersAcross} className="flex items-center gap-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-4 py-2 rounded-lg font-bold transition-colors">
+                <i className="fas fa-calculator"></i> מספור אוטומטי (למאוזן בלבד)
+              </button>
+              <button onClick={clearGrid} className="flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg font-bold transition-colors">
+                <i className="fas fa-eraser"></i> נקה הכל
+              </button>
+              <button onClick={() => window.print()} className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 px-6 py-2 rounded-lg font-bold transition-colors shadow-sm ml-auto">
+                <i className="fas fa-print"></i> הדפס 
+              </button>
             </div>
           </div>
 
-          {/* שטח ההדפסה */}
-          <div className="flex justify-center w-full overflow-x-auto print:overflow-visible">
+          <div className="flex justify-center w-full overflow-x-auto pb-10 print-hidden-scroll">
+            {/* מימדי הנייר מותאמים דינמית להעדפת הכיוון שנבחרה */}
             <div 
-              className="printable-wrapper relative bg-white shadow-2xl flex flex-col"
+              className="printable-wrapper relative bg-white shadow-xl rounded-xl overflow-hidden flex flex-col"
               style={{ 
-                width: orientation === 'landscape' ? '1123px' : '794px', 
-                aspectRatio: orientation === 'landscape' ? '297 / 210' : '210 / 297',
-                padding: '40px'
+                width: '100%', 
+                maxWidth: printOrientation === 'landscape' ? '1123px' : '794px', 
+                aspectRatio: printOrientation === 'landscape' ? '297 / 210' : '210 / 297', 
+                padding: '24px' 
               }}
             >
-              {bgImage && <img src={bgImage} className="absolute inset-0 w-full h-full object-cover opacity-30 z-0" />}
+              {bgImage && (
+                <img src={bgImage} alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-60 z-0 pointer-events-none" />
+              )}
 
-              <div className="relative z-10 text-center mb-6">
-                <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="text-3xl font-bold bg-transparent text-center w-full outline-none" style={{ fontFamily: selectedFont }} />
-                <input type="text" value={subtitle} onChange={e => setSubtitle(e.target.value)} className="text-lg text-gray-500 bg-transparent text-center w-full outline-none mt-1" style={{ fontFamily: selectedFont }} />
+              <div className="relative z-10 w-full text-center mb-6 flex flex-col items-center flex-shrink-0">
+                <input 
+                  type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+                  placeholder="הקלידו כותרת לתשבץ..."
+                  className="text-4xl font-bold bg-transparent border-none outline-none text-center text-gray-900 w-full max-w-3xl focus:ring-2 focus:ring-indigo-100 rounded-md print:text-black mb-1 hover:bg-gray-50 print:hover:bg-transparent transition-colors"
+                  style={{ fontFamily: selectedFont }}
+                />
+                <input 
+                  type="text" value={subtitle} onChange={(e) => setSubtitle(e.target.value)}
+                  placeholder="הקלידו כותרת משנה..."
+                  className="text-xl bg-transparent border-none outline-none text-center text-gray-600 w-full max-w-2xl focus:ring-2 focus:ring-indigo-100 rounded-md print:text-gray-800 hover:bg-gray-50 print:hover:bg-transparent transition-colors"
+                  style={{ fontFamily: selectedFont }}
+                />
               </div>
 
-              <div className={`relative z-10 flex ${orientation === 'landscape' ? 'flex-row gap-8' : 'flex-col gap-6'} flex-1 min-h-0 overflow-hidden`}>
+              {/* סידור דינמי של רשת והגדרות: שוכב (צד-לצד) או עומד (מעל-למטה) */}
+              <div className={`relative z-10 flex ${printOrientation === 'landscape' ? 'flex-row' : 'flex-col items-center'} gap-6 w-full flex-1 min-h-0 overflow-hidden`}>
                 
-                {/* רשת */}
-                <div className="flex-shrink-0 flex justify-center items-start">
-                  <div className="grid border-2 border-black bg-white" style={{ gridTemplateColumns: `repeat(${cols}, ${cellSize}px)` }}>
-                    {grid.map((row, r) => row.map((cell, c) => (
-                      <div 
-                        key={`${r}-${c}`} 
-                        onMouseDown={() => handleMouseDown(r, c)} onMouseEnter={() => isDragging && applyDragAction(r, c, dragAction)}
-                        className={`relative border border-black flex items-center justify-center select-none ${cell.isBlocked ? 'bg-black' : 'bg-white'} ${cell.isHighlighted && !cell.isBlocked ? 'bg-indigo-50' : ''}`}
-                        style={{ width: cellSize, height: cellSize }}
-                      >
-                        {!cell.isBlocked && cell.number && <span className="absolute top-0.5 right-0.5 text-[10px] font-bold leading-none">{cell.number}</span>}
-                        {!cell.isBlocked && <input type="text" value={cell.value} onChange={e => { if(mode === 'text') { const n = [...grid]; n[r][c].value = e.target.value.slice(-1); setGrid(n); }}} readOnly={mode !== 'text'} className="w-full h-full text-center font-bold bg-transparent outline-none uppercase" style={{ fontSize: cellSize * 0.6, pointerEvents: mode === 'text' ? 'auto' : 'none' }} />}
-                      </div>
-                    )))}
+                {/* רשת התשבץ */}
+                <div className="flex-shrink-0 flex items-start justify-center">
+                  <div className="bg-white/90 p-3 rounded-xl shadow-sm border border-gray-200 inline-block">
+                    <div className="inline-grid border-2 border-black" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                      {grid.map((row, r) => (
+                        row.map((cell, c) => (
+                          <div 
+                            key={`${r}-${c}`} 
+                            onMouseDown={() => handleMouseDown(r, c)}
+                            onMouseEnter={() => handleMouseEnter(r, c)}
+                            draggable="false"
+                            className={`relative border border-black flex items-center justify-center select-none ${cell.isBlocked ? 'bg-black' : 'bg-white'} ${cell.isHighlighted && !cell.isBlocked ? 'bg-gray-300' : ''} ${mode !== 'text' ? 'cursor-pointer hover:opacity-80' : ''}`}
+                            style={{ width: `${cellSize}px`, height: `${cellSize}px` }}
+                          >
+                            {!cell.isBlocked && cell.number && (
+                              <span className="absolute top-0.5 right-1 font-bold leading-none text-black pointer-events-none z-10 font-sans" style={{ fontSize: `${Math.max(cellSize * 0.28, 9)}px` }}>
+                                {cell.number}
+                              </span>
+                            )}
+                            {!cell.isBlocked && (
+                              <input
+                                type="text" value={cell.value} onChange={(e) => handleCellChange(r, c, e.target.value)} readOnly={mode !== 'text'}
+                                className={`w-full h-full text-center font-bold uppercase bg-transparent outline-none ${mode === 'text' ? 'cursor-text' : 'cursor-pointer'}`}
+                                style={{ pointerEvents: mode === 'text' ? 'auto' : 'none', fontFamily: selectedFont, fontSize: `${Math.max(cellSize * 0.55, 12)}px` }}
+                              />
+                            )}
+                          </div>
+                        ))
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* הגדרות */}
-                <div className="flex-1 overflow-y-auto pr-2 print-hidden-scroll">
-                  <div className={(cluesAcross.length + cluesDown.length) > 12 ? 'clues-multi-col' : ''}>
-                    {cluesDown.length > 0 && (
-                      <div className="mb-4">
-                        <h3 className="font-bold border-b-2 border-black mb-2 text-lg">מאונך:</h3>
-                        {cluesDown.map(c => (
-                          <div key={c.num} className="flex gap-2 mb-1 text-sm clue-row">
-                            <span className="font-bold min-w-[20px]">{c.num}.</span>
-                            <input type="text" value={c.text} onChange={e => setCluesDown(prev => prev.map(cl => cl.num === c.num ? {...cl, text: e.target.value} : cl))} placeholder="הגדרה..." className="flex-1 border-b border-gray-100 outline-none print:border-none" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {cluesAcross.length > 0 && (
-                      <div>
-                        <h3 className="font-bold border-b-2 border-black mb-2 text-lg">מאוזן:</h3>
-                        {cluesAcross.map(c => (
-                          <div key={c.num} className="flex gap-2 mb-1 text-sm clue-row">
-                            <span className="font-bold min-w-[20px]">{c.num}.</span>
-                            <input type="text" value={c.text} onChange={e => setCluesAcross(prev => prev.map(cl => cl.num === c.num ? {...cl, text: e.target.value} : cl))} placeholder="הגדרה..." className="flex-1 border-b border-gray-100 outline-none print:border-none" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* אזור ההגדרות - ערוך דינמית גם לכיוון הדפסה ולפיצול עמודות */}
+                <div className={`flex-1 flex ${printOrientation === 'portrait' ? 'flex-row w-full' : 'flex-col'} gap-4 min-w-[250px] overflow-y-auto print-hidden-scroll pb-4 print:overflow-visible`}>
+                  
+                  {/* הגדרות - מאונך */}
+                  <div className={`flex flex-col bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200 shrink-0 h-fit ${printOrientation === 'portrait' ? 'flex-1' : ''}`}>
+                    <h2 className="text-lg font-bold mb-2 border-b-2 border-black pb-1" style={{ fontFamily: selectedFont }}>מאונך:</h2>
+                    <div>
+                      {cluesDown.length === 0 ? (
+                        <p className="text-gray-500 text-sm print-hidden" style={{ fontFamily: selectedFont }}>השתמשו בכלי המספור כדי להוסיף הגדרות.</p>
+                      ) : (
+                        <div style={{ fontFamily: selectedFont, columnCount: cluesDown.length > 5 ? 2 : 1, columnGap: '2rem' }}>
+                          {cluesDown.map(clue => (
+                            <div key={`clue-dw-${clue.num}`} className="clue-item inline-flex items-center gap-1 ml-4 mb-2">
+                              <span className="font-bold text-left">{clue.num}.</span>
+                              <input 
+                                type="text" value={clue.text} onChange={(e) => handleClueChange(clue.num, 'down', e.target.value)} placeholder="הגדרה..."
+                                className="bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base py-1 transition-colors w-[150px] md:w-[180px]"
+                                style={{ fontFamily: selectedFont }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {/* הגדרות - מאוזן */}
+                  <div className={`flex flex-col bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200 shrink-0 h-fit ${printOrientation === 'portrait' ? 'flex-1' : ''}`}>
+                    <h2 className="text-lg font-bold mb-2 border-b-2 border-black pb-1" style={{ fontFamily: selectedFont }}>מאוזן:</h2>
+                    <div>
+                      {cluesAcross.length === 0 ? (
+                        <p className="text-gray-500 text-sm print-hidden" style={{ fontFamily: selectedFont }}>השתמשו במספור האוטומטי.</p>
+                      ) : (
+                        <div style={{ fontFamily: selectedFont, columnCount: cluesAcross.length > 5 ? 2 : 1, columnGap: '2rem' }}>
+                          {cluesAcross.map(clue => (
+                            <div key={`clue-ac-${clue.num}`} className="clue-item inline-flex items-center gap-1 ml-4 mb-2">
+                              <span className="font-bold text-left">{clue.num}.</span>
+                              <input 
+                                type="text" value={clue.text} onChange={(e) => handleClueChange(clue.num, 'across', e.target.value)} placeholder="הגדרה..."
+                                className="bg-transparent border-b border-gray-300 hover:border-gray-500 focus:border-indigo-500 outline-none print:border-none print:placeholder-transparent resize-none text-base py-1 transition-colors w-[150px] md:w-[180px]"
+                                style={{ fontFamily: selectedFont }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                 </div>
+
               </div>
             </div>
           </div>
 
-          {/* מודאל מספר */}
           {modalState.isOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print-hidden">
-              <form onSubmit={handleSaveManualNumber} className="bg-white p-6 rounded-xl w-80 shadow-2xl">
-                <h3 className="text-lg font-bold mb-4">מספר תא: {modalState.value}</h3>
-                <div className="space-y-3 mb-6">
-                  <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={modalState.isAcross} onChange={e => setModalState({...modalState, isAcross: e.target.checked})} className="w-5 h-5" /><span>שייך ל"מאוזן"</span></label>
-                  <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={modalState.isDown} onChange={e => setModalState({...modalState, isDown: e.target.checked})} className="w-5 h-5" /><span>שייך ל"מאונך"</span></label>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 print-hidden">
+              <form onSubmit={handleSaveManualNumber} className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm" dir="rtl">
+                <div className="flex justify-between items-center mb-4 border-b pb-3">
+                  <h3 className="text-lg font-bold text-indigo-900">הגדרת מספר ותפקיד לתא</h3>
+                  <button type="button" onClick={() => setModalState({ isOpen: false, r: null, c: null, value: '', isAcross: false, isDown: false })} className="text-gray-500 hover:bg-gray-100 p-1 rounded-md transition-colors">
+                    <i className="fas fa-times"></i>
+                  </button>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setModalState({isOpen:false})} className="px-4 py-2 text-gray-500">ביטול</button>
-                  <button type="submit" className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">שמור</button>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-bold mb-2 text-gray-700">מספר תא (השאר ריק למחיקה):</label>
+                  <input 
+                    autoFocus type="number" min="1" value={modalState.value} 
+                    onChange={(e) => setModalState({...modalState, value: e.target.value})}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg" 
+                  />
+                </div>
+
+                <div className="mb-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-sm font-bold text-gray-700 mb-2">לאן לשייך מספר זה?</p>
+                  <label className="flex items-center gap-3 mb-2 cursor-pointer">
+                    <input type="checkbox" checked={modalState.isAcross} onChange={(e) => setModalState({...modalState, isAcross: e.target.checked})} className="w-5 h-5 text-indigo-600 rounded" />
+                    <span className="text-gray-800">הוסף לרשימת "מאוזן"</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={modalState.isDown} onChange={(e) => setModalState({...modalState, isDown: e.target.checked})} className="w-5 h-5 text-indigo-600 rounded" />
+                    <span className="text-gray-800">הוסף לרשימת "מאונך"</span>
+                  </label>
+                </div>
+
+                <div className="flex gap-3 justify-end">
+                  <button type="button" onClick={() => setModalState({...modalState, value: '', isAcross: false, isDown: false})} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-bold transition-colors">
+                    נקה מספר
+                  </button>
+                  <button type="submit" className="px-5 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-bold transition-colors shadow-sm">
+                    שמור תא
+                  </button>
                 </div>
               </form>
             </div>
@@ -321,7 +617,8 @@
       );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
   </script>
 </body>
 </html>
